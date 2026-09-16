@@ -1,6 +1,5 @@
 typedef enum {OKAY, EXOKAY, SLVERR, DECERR} respCode;
 typedef enum {OP_IDLE, OP_RD, OP_WR, OP_RW} op_trnx;
-typedef enum {AW_W,W_AW} op_aw_trnx;
 typedef enum {RESET,STIMULUS} pkt_kind;
 class axi_packet;
 	
@@ -10,8 +9,7 @@ class axi_packet;
 		2. Read - Write Transaction
 	*/
 	rand op_trnx operation;
-	rand op_aw_trnx wr_operation;
-	
+
 	rand logic [ADDRESS_WIDTH-1:0] aw_addr;
 	rand logic [ADDRESS_WIDTH-1:0] ar_addr;
 	rand logic [DATA_WIDTH-1:0] w_data;
@@ -33,7 +31,6 @@ class axi_packet;
 		w_data inside {[0:255]};
 		w_strb inside {[0:(1<< STRB_WIDTH)-1]};
 		operation dist {OP_IDLE,OP_RD:=2,OP_WR:=2,OP_RW:=1};
-		wr_operation inside {AW_W,W_AW};	
 	}
 
 	constraint delay_valid{ // Randomizing the delays
@@ -50,7 +47,7 @@ class axi_packet;
 	endfunction
 	
 	function automatic void print_write_op_info();
-		$display("[Write], WR_OP = %0s, AW[ADDR = %0d], W[DATA = %0d, STRB = %0d]",this.wr_operation.name(),this.aw_addr,this.w_data,this.w_strb);
+		$display("[Write], AW[ADDR = %0d], W[DATA = %0d, STRB = %0d]",this.aw_addr,this.w_data,this.w_strb);
 	endfunction
 	
 	function automatic void print();
@@ -77,7 +74,6 @@ class axi_packet;
 		end
 		
 		this.operation = rhs.operation;
-		this.wr_operation = rhs.wr_operation;
 		this.reset_cycles = rhs.reset_cycles;
 		this.aw_addr=rhs.aw_addr;
 		this.ar_addr=rhs.ar_addr;

@@ -132,85 +132,60 @@ class axi_driver;
 	task automatic axi_write(
     input logic [ADDRESS_WIDTH-1:0] addr,
     input logic [DATA_WIDTH-1:0]    data,
-    input logic [STRB_WIDTH-1:0]    strb = {STRB_WIDTH{1'b1}}
+    input logic [STRB_WIDTH-1:0]    strb,
+    input logic [DELAY_WIDTH-1:0]   aw_del,
+    input logic [DELAY_WIDTH-1:0]   w_del
 	);
 		begin
-			case(pkt.wr_operation)
-				AW_W:
-					axi_AW_W(addr,data,strb); // First Driving AW follwed by delay and then W Channel signals
-				W_AW:
-					axi_W_AW(addr,data,strb); // First Driving W follwed by delay and then AW Channel signals
-			endcase
-		end
-	endtask
-	
-	/**************************************************
-	* Driving AW channel followed by driving W channel
-	**************************************************/
-	task automatic axi_AW_W(
-    input logic [ADDRESS_WIDTH-1:0] addr,
-    input logic [DATA_WIDTH-1:0]    data,
-    input logic [STRB_WIDTH-1:0]    strb = {STRB_WIDTH{1'b1}}
-	);
-		begin
-			$display("[%0t][Driver] AW_W operation started ",$time);
-			repeat(pkt.aw_del) @(vif.cb);
-			
-			aw_signals(addr);
-			
-			repeat(pkt.w_del) @(vif.cb);
-			
-			w_signals(data,strb);
-			
-			@(vif.cb);
-			
+			$display("[%0t][Driver] Write operation started ",$time);
+
+			// AW and W channels run as two independent processes, each on
+			// its own randomized delay. Whichever finishes first just waits
+			// for the other - no fixed ordering is imposed between them.
 			fork
-				axi_AW_hs(); // Waiting for the W handsake
-			
-				axi_W_hs(); // Waiting for the AW handsake
+				aw_channel(addr,aw_del);
+				w_channel(data,strb,w_del);
 			join
-			
+
 			axi_drive_response_Channel(); // Waiting for the Response
-			
-			$display("[%0t][Driver] AW_W operation finished ",$time);
+
+			$display("[%0t][Driver] Write operation finished ",$time);
 		end
 	endtask
 
 	/**************************************************
-	* Driving W channel followed by driving AW channel
+	* Drives the AW channel end-to-end (delay, signals,
+	* handshake) independently of the W channel.
 	**************************************************/
-	task automatic axi_W_AW(
+	task automatic aw_channel(
     input logic [ADDRESS_WIDTH-1:0] addr,
-    input logic [DATA_WIDTH-1:0]    data,
-    input logic [STRB_WIDTH-1:0]    strb = {STRB_WIDTH{1'b1}}
+    input logic [DELAY_WIDTH-1:0]   del
 	);
 		begin
-			$display("[%0t][Driver] W_AW operation started ",$time);
-			
-			repeat(pkt.w_del) @(vif.cb); // Initial delay before driving the transaction
-			
-			w_signals(data,strb);
-
-			repeat(pkt.aw_del) @(vif.cb); // Initial delay for AW  transaction
-			
+			repeat(del) @(vif.cb);
 			aw_signals(addr);
-
-			@(vif.cb);
-			
-			fork
-				axi_AW_hs(); // Waiting for the W handsake
-			
-				axi_W_hs(); // Waiting for the AW handsake
-			join
-			
-			axi_drive_response_Channel(); // Waiting for the Response
-			
-			$display("[%0t][Driver] W_AW operation finished ",$time);
+			axi_AW_hs();
 		end
 	endtask
-	
-	
-	
+
+	/**************************************************
+	* Drives the W channel end-to-end (delay, signals,
+	* handshake) independently of the AW channel.
+	**************************************************/
+	task automatic w_channel(
+    input logic [DATA_WIDTH-1:0]  data,
+    input logic [STRB_WIDTH-1:0]  strb,
+    input logic [DELAY_WIDTH-1:0] del
+	);
+		begin
+			repeat(del) @(vif.cb);
+			w_signals(data,strb);
+			axi_W_hs();
+		end
+	endtask
+
+
+
 	task automatic axi_read(
 		input logic [DELAY_WIDTH-1:0]r_del,
 		input logic [ADDRESS_WIDTH-1:0] addr
@@ -254,12 +229,12 @@ class axi_driver;
 			OP_RD: begin
 				axi_read(pkt.initial_r_del,pkt.ar_addr); // Driving the Read Transaction
 			end
-			OP_WR: axi_write(pkt.aw_addr,pkt.w_data,pkt.w_strb); // Driving the Write Transaction
-			
+			OP_WR: axi_write(pkt.aw_addr,pkt.w_data,pkt.w_strb,pkt.aw_del,pkt.w_del); // Driving the Write Transaction
+
 			OP_RW : begin // Read and Write Transaction Simultaneously
 				fork
 					axi_read(pkt.initial_r_del,pkt.ar_addr); // Driving the Read Transaction
-					axi_write(pkt.aw_addr,pkt.w_data,pkt.w_strb);// Driving the Write Transaction
+					axi_write(pkt.aw_addr,pkt.w_data,pkt.w_strb,pkt.aw_del,pkt.w_del);// Driving the Write Transaction
 				join
 			end
 			
